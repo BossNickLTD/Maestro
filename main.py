@@ -4,6 +4,7 @@ from groq import Groq
 import os
 import json
 from menu_utils import load_menu, validate_order, build_menu_prompt
+from printer import print_order
 
 app = FastAPI(title="Maestro API")
 
@@ -15,6 +16,16 @@ with open(env_path) as f:
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 menu = load_menu()
+
+COUNTER_PATH = os.path.join(os.path.dirname(__file__), "_counter.json")
+def next_order_num():
+    num = 1
+    if os.path.exists(COUNTER_PATH):
+        with open(COUNTER_PATH) as f:
+            num = json.load(f).get("last", 0) + 1
+    with open(COUNTER_PATH, "w") as f:
+        json.dump({"last": num}, f)
+    return num
 
 MENU_PROMPT = f"""Ты — AI-официант. Извлеки заказ из сообщения.
 
@@ -33,6 +44,7 @@ MENU_PROMPT = f"""Ты — AI-официант. Извлеки заказ из �
 
 class OrderRequest(BaseModel):
     text: str
+    table: int = 0
 
 class ItemOut(BaseModel):
     name: str
@@ -45,6 +57,7 @@ class OrderOut(BaseModel):
     errors: list[str] = []
     warnings: list[str] = []
     total: int = 0
+    order_num: int = 0
 
 @app.post("/order", response_model=OrderOut)
 def create_order(req: OrderRequest):
@@ -62,9 +75,6 @@ def create_order(req: OrderRequest):
         clean = clean.split("\n", 1)[-1]
         clean = clean.rsplit("```", 1)[0]
     clean = clean.strip()
-    
-    with open("_llm_raw.json", "w", encoding="utf-8") as f:
-        f.write(clean)
 
     data = json.loads(clean)
     items_raw = data.get("items", [])
@@ -75,4 +85,9 @@ def create_order(req: OrderRequest):
     for u in unknown:
         errors.append(f"'{u}' нет в меню")
     total = sum(i["price"] * i["quantity"] for i in items)
-    return {"items": items, "errors": errors, "warnings": warnings, "total": total}
+
+    order_num = next_order_num()
+    order_data = {"items": items, "errors": errors}
+    print_order(order_data, table=req.table, order_num=order_num)
+
+    return {"items": items, "errors": errors, "warnings": warnings, "total": total, "order_num": order_num}
