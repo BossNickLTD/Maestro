@@ -12,7 +12,7 @@
     <header class="flex items-center justify-between mb-8">
       <h1 class="text-3xl font-bold tracking-tight">Maestro</h1>
       <div class="flex items-center gap-3">
-        <button onclick="load()" class="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">обновить</button>
+        <button onclick="load(this)" class="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition active:scale-95">обновить</button>
         <span class="text-sm text-gray-500" id="refreshTime"></span>
       </div>
     </header>
@@ -36,7 +36,8 @@
   </div>
 
   <script>
-    async function load() {
+    async function load(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = '...'; }
       try {
         const [orders, menu] = await Promise.all([
           fetch('/history').then(r => r.json()),
@@ -58,21 +59,23 @@
               <span class="text-gray-400">#${o.order_num}</span>
               <span class="font-medium">${o.table ? 'Стол ' + o.table : ''}</span>
               <span class="float-right">${o.total} руб</span>
-              <div class="text-gray-600">${(o.items || []).map(i => i.name + ' ×' + i.quantity).join(', ')}</div>
+              <div class="text-gray-600">${(o.items || []).map(i => i.name + ' \u00D7' + i.quantity).join(', ')}</div>
               ${o.errors?.length ? '<div class="text-xs text-red-400">' + o.errors.join('; ') + '</div>' : ''}
             </div>`).join('')
-          : '<p class="text-gray-400">Пока нет заказов</p>';
+          : '<p class="text-gray-400">\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u0437\u0430\u043A\u0430\u0437\u043E\u0432</p>';
 
         const stopList = menu.stop_list || [];
         document.getElementById('stopList').innerHTML = (menu.items || []).map(i => {
           const stopped = stopList.includes(i.name);
           return `<div class="flex items-center justify-between border-b pb-1">
             <span class="${stopped ? 'line-through text-red-400' : ''}">${i.name}</span>
-            <button onclick="toggleStop('${i.name}')" class="text-xs px-3 py-1 rounded ${stopped ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}">${stopped ? 'вернуть' : 'стоп'}</button>
+            <button onclick="toggleStop('${i.name}')" class="text-xs px-3 py-1 rounded ${stopped ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}">${stopped ? '\u0432\u0435\u0440\u043D\u0443\u0442\u044C' : '\u0441\u0442\u043E\u043F'}</button>
           </div>`;
         }).join('');
       } catch (e) {
-        document.getElementById('orders').innerHTML = '<p class="text-red-400">Ошибка загрузки</p>';
+        document.getElementById('orders').innerHTML = '<p class="text-red-400">\u041E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438</p>';
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '\u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C'; }
       }
     }
 
@@ -82,7 +85,7 @@
     }
 
     load();
-    setInterval(load, 10000);
+    setInterval(() => load(), 10000);
   </script>
 </body>
 </html>
