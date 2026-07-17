@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from groq import Groq
 import os
@@ -7,8 +8,13 @@ import json
 from datetime import datetime
 from menu_utils import load_menu, validate_order, build_menu_prompt
 from printer import print_order
+from voice import tts
 
 app = FastAPI(title="Maestro API")
+
+audio_dir = os.path.join(os.path.dirname(__file__), "audio")
+os.makedirs(audio_dir, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 with open(env_path) as f:
@@ -136,3 +142,74 @@ def toggle_stop(body: dict):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(menu, f, ensure_ascii=False, indent=2)
     return {"stop_list": menu["stop_list"]}
+
+@app.post("/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename or "audio.wav")[1] or ".wav"
+    tmp = os.path.join(os.path.dirname(__file__), f"_tmp_audio{ext}")
+    with open(tmp, "wb") as f:
+        f.write(await file.read())
+    with open(tmp, "rb") as f:
+        r = client.audio.transcriptions.create(
+            file=(file.filename or "audio.wav", f.read()),
+            model="whisper-large-v3-turbo",
+            response_format="json"
+        )
+    os.remove(tmp)
+    return {"text": r.text}
+
+@app.post("/voice-order")
+async def voice_order(file: UploadFile = File(...), table: int = 0):
+    ext = os.path.splitext(file.filename or "audio.wav")[1] or ".wav"
+    tmp = os.path.join(os.path.dirname(__file__), f"_tmp_audio{ext}")
+    with open(tmp, "wb") as f:
+        f.write(await file.read())
+
+    with open(tmp, "rb") as f:
+        r = client.audio.transcriptions.create(
+            file=(file.filename or "audio.wav", f.read()),
+            model="whisper-large-v3-turbo",
+            response_format="json"
+        )
+    os.remove(tmp)
+    text = r.text
+
+    llm = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "system", "content": MENU_PROMPT}, {"role": "user", "content": text}]
+    )
+    clean = llm.choices[0].message.content.strip()
+    if clean.startswith("```"):
+        clean = clean.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    data = json.loads(clean)
+    items_raw = data.get("items", [])
+    item_names = [i.get("name", "").lower() for i in items_raw]
+    unknown = [u for u in data.get("unknown", []) if not any(u.lower() in name for name in item_names)]
+    items, errors, warnings = validate_order(items_raw, menu)
+    for u in unknown:
+        errors.append(f"'{u}' нет в меню")
+    total = sum(i["price"] * i["quantity"] for i in items)
+    order_num = next_order_num()
+    order_data = {"items": items, "errors": errors}
+    print_order(order_data, table=table, order_num=order_num)
+
+    history_path = os.path.join(os.path.dirname(__file__), "_orders.json")
+    record = {"order_num": order_num, "table": table, "items": items, "errors": errors, "total": total, "time": datetime.now().isoformat(), "text": text}
+    if os.path.exists(history_path):
+        with open(history_path, encoding="utf-8") as f:
+            history = json.load(f)
+    else:
+        history = []
+    history.append(record)
+    with open(history_path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+    response_text = f"Заказ принят. {total} рублей."
+    audio_path = tts(response_text)
+    audio_url = f"/audio/{os.path.basename(audio_path)}"
+    return {"text": text, "items": items, "errors": errors, "total": total, "order_num": order_num, "audio_url": audio_url}
+
+@app.get("/tts")
+def text_to_speech(text: str = "", filename: str = "tts.mp3"):
+    path = tts(text or "пустой запрос", filename)
+    return FileResponse(path, media_type="audio/mpeg")
