@@ -80,6 +80,9 @@ def validate_order(items_raw, menu):
             continue
 
         mods = raw.get("modifiers", raw.get("modifications", {}))
+        defaults = extract_modifiers(item["name"], menu)
+        for k, v in defaults.items():
+            mods.setdefault(k, v)
         result.append({
             "name": item["name"],
             "quantity": qty,
