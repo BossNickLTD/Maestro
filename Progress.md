@@ -135,9 +135,24 @@
 
 **Коммит:** `d04d7a1`
 
-## Этап 6 — Звук ⬜
+## Этап 6 — Звук ✅
 
-STT (Whisper) + TTS.
+**Файлы:** `voice.py`
+
+**Что сделано:**
+- TTS (Text-to-Speech) через edge-tts (бесплатно, без API-ключа)
+  - Голос: ru-RU-SvetlanaNeural
+  - Функция `tts(text)` — сохраняет MP3 в папку `audio/`
+- STT (Speech-to-Text) через Groq Whisper (`whisper-large-v3-turbo`)
+  - Эндпоинт `POST /transcribe` — аудиофайл → текст
+- Полный голосовой заказ: `POST /voice-order`
+  - Аудио → транскрибация → LLM извлекает заказ → валидация по меню → печать чека → сохранение истории → TTS-ответ
+  - Возвращает: текст, items, errors, total, order_num, audio_url
+- `GET /tts?text=...` — любой текст → MP3
+- Аудиофайлы раздаются как статика через `/audio/*`
+- Папка `audio/` — создаётся автоматически
+
+**Коммит:** `dfb6267`
 
 ## Этап 7 — Железо ⬜
 
