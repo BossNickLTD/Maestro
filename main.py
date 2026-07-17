@@ -210,6 +210,6 @@ async def voice_order(file: UploadFile = File(...), table: int = 0):
     return {"text": text, "items": items, "errors": errors, "total": total, "order_num": order_num, "audio_url": audio_url}
 
 @app.get("/tts")
-def text_to_speech(text: str = "", filename: str = "tts.mp3"):
-    path = tts(text or "пустой запрос", filename)
+def text_to_speech(text: str = ""):
+    path = tts(text or "пустой запрос")
     return FileResponse(path, media_type="audio/mpeg")
