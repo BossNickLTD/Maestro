@@ -11,7 +11,10 @@
   <div class="max-w-6xl mx-auto p-6">
     <header class="flex items-center justify-between mb-8">
       <h1 class="text-3xl font-bold tracking-tight">Maestro</h1>
-      <span class="text-sm text-gray-500" id="refreshTime"></span>
+      <div class="flex items-center gap-3">
+        <button onclick="load()" class="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">обновить</button>
+        <span class="text-sm text-gray-500" id="refreshTime"></span>
+      </div>
     </header>
 
     <div class="grid grid-cols-3 gap-4 mb-8" id="stats">
