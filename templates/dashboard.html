@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maestro — Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>.card{@apply bg-white rounded-xl shadow p-4 border}</style>
+</head>
+<body class="bg-gray-50 font-sans antialiased">
+  <div class="max-w-6xl mx-auto p-6">
+    <header class="flex items-center justify-between mb-8">
+      <h1 class="text-3xl font-bold tracking-tight">Maestro</h1>
+      <span class="text-sm text-gray-500" id="refreshTime"></span>
+    </header>
+
+    <div class="grid grid-cols-3 gap-4 mb-8" id="stats">
+      <div class="card"><p class="text-sm text-gray-500">Заказов сегодня</p><p class="text-2xl font-bold" id="statOrders">—</p></div>
+      <div class="card"><p class="text-sm text-gray-500">Выручка сегодня</p><p class="text-2xl font-bold" id="statRevenue">—</p></div>
+      <div class="card"><p class="text-sm text-gray-500">Средний чек</p><p class="text-2xl font-bold" id="statAvg">—</p></div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="card">
+        <h2 class="text-lg font-semibold mb-3">Последние заказы</h2>
+        <div id="orders" class="space-y-2 text-sm">Загрузка...</div>
+      </div>
+      <div class="card">
+        <h2 class="text-lg font-semibold mb-3">Стоп-лист</h2>
+        <div id="stopList" class="space-y-2 text-sm">Загрузка...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function load() {
+      try {
+        const [orders, menu] = await Promise.all([
+          fetch('/history').then(r => r.json()),
+          fetch('/menu-data').then(r => r.json())
+        ]);
+
+        document.getElementById('refreshTime').textContent = 'обновлено: ' + new Date().toLocaleTimeString('ru');
+
+        const today = new Date().toDateString();
+        const todayOrders = orders.filter(o => new Date(o.time).toDateString() === today);
+        const revenue = todayOrders.reduce((s, o) => s + (o.total || 0), 0);
+        document.getElementById('statOrders').textContent = todayOrders.length;
+        document.getElementById('statRevenue').textContent = revenue + ' руб';
+        document.getElementById('statAvg').textContent = todayOrders.length ? Math.round(revenue / todayOrders.length) + ' руб' : '—';
+
+        const last20 = orders.slice(-20).reverse();
+        document.getElementById('orders').innerHTML = last20.length
+          ? last20.map(o => `<div class="border-b pb-1 ${o.errors?.length ? 'text-red-500' : ''}">
+              <span class="text-gray-400">#${o.order_num}</span>
+              <span class="font-medium">${o.table ? 'Стол ' + o.table : ''}</span>
+              <span class="float-right">${o.total} руб</span>
+              <div class="text-gray-600">${(o.items || []).map(i => i.name + ' ×' + i.quantity).join(', ')}</div>
+              ${o.errors?.length ? '<div class="text-xs text-red-400">' + o.errors.join('; ') + '</div>' : ''}
+            </div>`).join('')
+          : '<p class="text-gray-400">Пока нет заказов</p>';
+
+        const stopList = menu.stop_list || [];
+        document.getElementById('stopList').innerHTML = (menu.items || []).map(i => {
+          const stopped = stopList.includes(i.name);
+          return `<div class="flex items-center justify-between border-b pb-1">
+            <span class="${stopped ? 'line-through text-red-400' : ''}">${i.name}</span>
+            <button onclick="toggleStop('${i.name}')" class="text-xs px-3 py-1 rounded ${stopped ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}">${stopped ? 'вернуть' : 'стоп'}</button>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        document.getElementById('orders').innerHTML = '<p class="text-red-400">Ошибка загрузки</p>';
+      }
+    }
+
+    async function toggleStop(name) {
+      await fetch('/stop-list', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name}) });
+      load();
+    }
+
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

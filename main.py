@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from groq import Groq
 import os
 import json
+from datetime import datetime
 from menu_utils import load_menu, validate_order, build_menu_prompt
 from printer import print_order
 
@@ -90,4 +92,47 @@ def create_order(req: OrderRequest):
     order_data = {"items": items, "errors": errors}
     print_order(order_data, table=req.table, order_num=order_num)
 
+    history_path = os.path.join(os.path.dirname(__file__), "_orders.json")
+    record = {"order_num": order_num, "table": req.table, "items": items, "errors": errors, "total": total, "time": datetime.now().isoformat(), "text": req.text}
+    if os.path.exists(history_path):
+        with open(history_path, encoding="utf-8") as f:
+            history = json.load(f)
+    else:
+        history = []
+    history.append(record)
+    with open(history_path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
     return {"items": items, "errors": errors, "warnings": warnings, "total": total, "order_num": order_num}
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+@app.get("/history")
+def get_history():
+    path = os.path.join(os.path.dirname(__file__), "_orders.json")
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+@app.get("/menu-data")
+def get_menu():
+    return menu
+
+@app.post("/stop-list")
+def toggle_stop(body: dict):
+    name = body.get("name", "")
+    if name not in [i["name"] for i in menu["items"]]:
+        raise HTTPException(400, "нет в меню")
+    if name in menu["stop_list"]:
+        menu["stop_list"].remove(name)
+    else:
+        menu["stop_list"].append(name)
+    path = os.path.join(os.path.dirname(__file__), "menu.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(menu, f, ensure_ascii=False, indent=2)
+    return {"stop_list": menu["stop_list"]}
